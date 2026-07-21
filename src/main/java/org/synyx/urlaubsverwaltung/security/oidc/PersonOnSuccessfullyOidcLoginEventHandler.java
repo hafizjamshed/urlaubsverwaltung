@@ -4,13 +4,17 @@ import org.apache.commons.validator.routines.EmailValidator;
 import org.slf4j.Logger;
 import org.springframework.context.event.EventListener;
 import org.springframework.security.authentication.event.AuthenticationSuccessEvent;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.core.oidc.StandardClaimNames;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.synyx.urlaubsverwaltung.person.Person;
 import org.synyx.urlaubsverwaltung.person.PersonService;
 import org.synyx.urlaubsverwaltung.person.PersonUpdate;
+import org.synyx.urlaubsverwaltung.person.Role;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -26,9 +30,12 @@ class PersonOnSuccessfullyOidcLoginEventHandler {
     private static final Logger LOG = getLogger(lookup().lookupClass());
 
     private final PersonService personService;
+    private final RolesFromClaimMappersProperties properties;
 
-    PersonOnSuccessfullyOidcLoginEventHandler(PersonService personService) {
+    PersonOnSuccessfullyOidcLoginEventHandler(PersonService personService,
+                                              RolesFromClaimMappersProperties properties) {
         this.personService = personService;
+        this.properties = properties;
     }
 
     @EventListener
@@ -45,6 +52,8 @@ class PersonOnSuccessfullyOidcLoginEventHandler {
         final String lastName = extractFamilyName(oidcUser);
         final String emailAddress = extractMailAddress(oidcUser);
 
+        final boolean permissionsFromOidc = properties.getGroupClaim().isEnabled() || properties.getResourceAccessClaim().isEnabled();
+
         Optional<Person> optionalPerson = personService.getPersonByUsername(userUniqueID);
         // try to fall back to uniqueness of mailAddress if userUniqueID is not found in database
         if (optionalPerson.isEmpty()) {
@@ -60,13 +69,31 @@ class PersonOnSuccessfullyOidcLoginEventHandler {
                     "person lookup. Existing username '{}' is replaced with '{}'.", existentPerson.getUsername(), userUniqueID);
             }
 
-            personService.update(existentPerson.getIdAsPersonId(),
-                PersonUpdate.ofPersonalData(userUniqueID, firstName, lastName, emailAddress));
+            PersonUpdate personUpdate = PersonUpdate.ofPersonalData(userUniqueID, firstName, lastName, emailAddress);
+            if (permissionsFromOidc) {
+                personUpdate = personUpdate.withPermissions(getRoles(oidcUser));
+            }
+            personService.update(existentPerson.getIdAsPersonId(), personUpdate);
 
         } else {
-            final Person createdPerson = personService.create(userUniqueID, firstName, lastName, emailAddress);
-            personService.appointAsOfficeUserIfNoOfficeUserPresent(createdPerson.getIdAsPersonId());
+            if (permissionsFromOidc) {
+                personService.create(userUniqueID, firstName, lastName, emailAddress, List.of(), getRoles(oidcUser));
+            } else {
+                final Person createdPerson = personService.create(userUniqueID, firstName, lastName, emailAddress);
+                personService.appointAsOfficeUserIfNoOfficeUserPresent(createdPerson.getIdAsPersonId());
+            }
         }
+    }
+
+    private List<Role> getRoles(OidcUser oidcUser) {
+        final List<String> validRoles = Arrays.stream(Role.values()).map(Role::name).toList();
+        return oidcUser.getAuthorities()
+            .stream()
+            .map(GrantedAuthority::getAuthority)
+            .filter(validRoles::contains)
+            .map(Role::valueOf)
+            .distinct()
+            .toList();
     }
 
     private String extractIdentifier(OidcUser oidcUser) {

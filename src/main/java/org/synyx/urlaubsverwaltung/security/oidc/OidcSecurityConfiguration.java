@@ -20,10 +20,9 @@ import java.util.List;
 class OidcSecurityConfiguration {
 
     @Bean
-    PersonOnSuccessfullyOidcLoginEventHandler personOnSuccessfullyOidcLoginEventHandler(final PersonService personService) {
-        return new PersonOnSuccessfullyOidcLoginEventHandler(personService);
+    PersonOnSuccessfullyOidcLoginEventHandler personOnSuccessfullyOidcLoginEventHandler(final PersonService personService, final RolesFromClaimMappersProperties rolesFromClaimMappersProperties) {
+        return new PersonOnSuccessfullyOidcLoginEventHandler(personService, rolesFromClaimMappersProperties);
     }
-
     @Bean
     OidcPersonAuthoritiesMapper oidcPersonAuthoritiesMapper(final PersonService personService) {
         return new OidcPersonAuthoritiesMapper(personService);

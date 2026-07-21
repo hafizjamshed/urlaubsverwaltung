@@ -51,7 +51,7 @@ class PersonOnSuccessfullyOidcLoginEventHandlerTest {
 
     @BeforeEach
     void setUp() {
-        sut = new PersonOnSuccessfullyOidcLoginEventHandler(personService);
+        sut = new PersonOnSuccessfullyOidcLoginEventHandler(personService, new RolesFromClaimMappersProperties());
     }
 
     @Nested
