@@ -1,5 +1,5 @@
 # Build stage - compiles Java code inside Docker
-FROM maven:3.9-eclipse-temurin-25 as builder
+FROM maven:3.9-eclipse-temurin-25 AS builder
 WORKDIR /workspace
 COPY . /workspace
 RUN mvn clean package -DskipTests
